@@ -7,6 +7,7 @@
 	.def cron_status = r22
 	.def show_cron = r23
 	.def temp3 = r24
+	.def button_reset_state = r25
 
 	.dseg
 	digitos_relogio: .byte 4
@@ -38,8 +39,9 @@ display_table:
 	ldi temp, 0xCF  ; PC4 como entrada (0), o resto como saída (1)
 	out DDRC, temp  ; Configura PORTC
 
-	sbi PORTC, PC4  ; Habilita pull-up em PC4
-	sbi PORTC, PC5  ; Habilita pull-up em PC5
+	sbi PORTC, PC4  ; Habilita pull-up em PC4 - Modo
+	sbi PORTC, PC5  ; Habilita pull-up em PC5 - Start/Pause
+	sbi PORTC, PC3  ; Habilita pull-up em PC3 - Reset
 
     ; Zera contadores de tempo e multiplex
     ;clr units
@@ -62,6 +64,7 @@ display_table:
 
     clr display_index
     clr display_mode
+	clr button_reset_state
 
 	ldi button_mode_state, 0
 	ldi cron_status, 0
@@ -97,6 +100,7 @@ main_lp:
 	; Verifica o estado do botão
     rcall check_mode_button
 	rcall check_start_button
+	rcall check_reset_button
     ; multiplexa displays rápido
     rcall update_display
 
@@ -115,6 +119,8 @@ skipoverflow3:
     rjmp main_lp
 
 update_time:
+	cpi display_mode, 2		; para a contagem no Modo 3
+	breq update_cron_time
     ; incrementa MM:SS
 	lds temp2, digitos_relogio
     inc temp2
@@ -247,10 +253,38 @@ invert_cron_state:
     ldi temp, 1
 	eor cron_status, temp
 
+check_reset_button:
+	cpi display_mode, 1
+	brne button_check_end
+
+	sbic PINC, PC3
+	rjmp button_reset_pressed
+
+    clr button_reset_state
+	ret
 
 button_check_end:
     ret                        ; Retorna da função
 
+button_reset_pressed:
+    ; Verifica se o botão já foi pressionado
+    cpi button_reset_state, 0
+    brne button_check_end   ; Se já estava pressionado, reseta o estado
+
+    ; Se não estava pressionado, marca como pressionado
+    ldi button_reset_state, 1 ; Marca o botão como pressionado
+    ; Aqui você pode adicionar a lógica para iniciar o cronômetro ou outra ação
+    rjmp reset_cron      ; Sai da função
+
+reset_cron:
+	cpi cron_status, 1
+	breq button_check_end
+	ldi temp2, 0
+	sts digitos_cron, temp2
+	sts digitos_cron+1, temp2
+	sts digitos_cron+2, temp2
+	sts digitos_cron+3, temp2
+	ldi cron_status, 0
 ;=============================
 ; update_display
 ; Atualiza os displays de acordo com o modo atual
