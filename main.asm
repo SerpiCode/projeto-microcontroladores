@@ -6,8 +6,8 @@
 .def display_index = r21
 .def cron_status = r22
 .def show_cron = r23
-.def temp3 = r24
-.def button_reset_state = r25
+.def button_reset_state = r24
+.def ajuste_index = r25
 
 .dseg
 digitos_relogio: .byte 4
@@ -85,10 +85,6 @@ msg_header_modo2_contando:
     sts  UCSR0C, r16
 
     ; Zera contadores de tempo e multiplex
-    ;clr units
-    ;clr tens
-    ;clr min_units
-    ;clr min_tens
 	; zera todos os digitos
 	ldi temp2, 0
 	sts digitos_relogio, temp2
@@ -105,7 +101,6 @@ msg_header_modo2_contando:
 
     clr display_index
 	ldi display_mode, 2
-    ;ldi display_mode, 2
 	clr button_reset_state
 
 	ldi button_mode_state, 0
@@ -139,19 +134,22 @@ msg_header_modo2_contando:
 ; Loop principal
 ;=============================
 main_lp:
-	; Verifica o estado do bot?o
+	; Verifica o estado do botao
     rcall check_mode_button
 	rcall check_start_button
 	rcall check_reset_button
-    ; multiplexa displays r?pido
+	
+    ; multiplexa displays rapido
     rcall update_display
+	cpi display_mode, 2
+	breq ajustar_horario
 
-	; 2) checa estouro de 1?s
+	; 2) checa estouro de 1s
     in temp, TIFR1
     andi temp, 1<<OCF1A
     breq skipoverflow3
 
-    ; limpa flag de compara??o
+    ; limpa flag de comparacao
     ldi temp, 1<<OCF1A
     out TIFR1, temp
 
@@ -161,8 +159,91 @@ main_lp:
 skipoverflow3:
     rjmp main_lp
 
-update_time:
+ajustar_horario:
+	; Seleção de dígito com botão PC5
+	sbic PINC, 5
+	rjmp no_select_button
+	rcall debounce_select
+		inc ajuste_index
+		cpi ajuste_index, 4
+		brlt no_select_button
+		ldi ajuste_index, 0  ; volta ao início se passar de 3
+	no_select_button:
+	; Incremento de valor com botão PC3
+	sbic PINC, 3
+	rjmp no_inc_button
+	rcall debounce_inc
+		cpi ajuste_index, 0
+		breq inc_hora_dezena
+		cpi ajuste_index, 1
+		breq inc_hora_unidade
+		cpi ajuste_index, 2
+		breq inc_min_dezena
+		cpi ajuste_index, 3
+		breq inc_min_unidade
 
+	inc_hora_dezena:
+		lds temp2, digitos_relogio+3
+		inc temp2
+		cpi temp2, 7
+		brlt ok1
+		ldi temp2, 0
+		ok1:
+		sts digitos_relogio+3, temp2
+		rjmp no_inc_button
+
+	inc_hora_unidade:
+		lds temp2, digitos_relogio+2
+		inc temp2
+		cpi temp2, 10
+		brne ok2
+		ldi temp2, 0
+		ok2:
+		sts digitos_relogio+2, temp2
+		rjmp no_inc_button
+	
+	inc_min_dezena:
+		lds temp2, digitos_relogio+1
+		inc temp2
+		cpi temp2, 10
+		brne ok3
+		ldi temp2, 0
+		ok3:
+		sts digitos_relogio+1, temp2
+		rjmp no_inc_button
+
+	inc_min_unidade:
+		lds temp2, digitos_relogio
+		inc temp2
+		cpi temp2, 10
+		brne ok4
+		ldi temp2, 0
+		ok4:
+		sts digitos_relogio, temp2
+		rjmp no_inc_button
+
+	no_inc_button:
+		rjmp main_lp
+
+	debounce_select:
+	sbis PINC, 5
+	rjmp debounce_select
+	call delay_2ms
+	wait_ds:
+		dec r27
+		brne wait_ds
+		ret
+
+	debounce_inc:
+		sbis PINC, 3
+		rjmp debounce_inc
+		call delay_2ms
+	wait_di:
+		dec r27
+		brne wait_di
+		ret
+
+update_time:
 	;rcall send_time_serial	
 
 	; Para a contagem no Modo 3
@@ -211,39 +292,39 @@ update_cron_time:
 	cpi cron_status, 1
 	brne skip_cron
     ; incrementa MM:SS
-	lds temp3, digitos_cron
-    inc temp3
-	sts digitos_cron, temp3
-    cpi temp3, 10
+	lds temp2, digitos_cron
+    inc temp2
+	sts digitos_cron, temp2
+    cpi temp2, 10
     brlt skipoverflow
 
-    ldi temp3, 0
-	sts digitos_cron, temp3
-	lds temp3, digitos_cron+1
-    inc temp3
-	sts digitos_cron+1, temp3
-    cpi temp3, 6
+    ldi temp2, 0
+	sts digitos_cron, temp2
+	lds temp2, digitos_cron+1
+    inc temp2
+	sts digitos_cron+1, temp2
+    cpi temp2, 6
     brlt skipoverflow
 
-    ldi temp3, 0
-	sts digitos_cron+1, temp3
-	lds temp3, digitos_cron+2
-    inc temp3
-	sts digitos_cron+2, temp3
-    cpi temp3, 10
+    ldi temp2, 0
+	sts digitos_cron+1, temp2
+	lds temp2, digitos_cron+2
+    inc temp2
+	sts digitos_cron+2, temp2
+    cpi temp2, 10
     brlt skipoverflow
 
-    ldi temp3, 0
-	sts digitos_cron+2, temp3
-    lds temp3, digitos_cron+3
-	inc temp3
-	sts digitos_cron+3, temp3
-    cpi temp3, 6
+    ldi temp2, 0
+	sts digitos_cron+2, temp2
+    lds temp2, digitos_cron+3
+	inc temp2
+	sts digitos_cron+3, temp2
+    cpi temp2, 6
     brlt skipoverflow
 
     ; se chegou em 60:00, reseta tudo
-    ldi temp3, 0
-	sts digitos_cron+3, temp3
+    ldi temp2, 0
+	sts digitos_cron+3, temp2
 
 skip_cron:
 	rjmp main_lp
@@ -277,9 +358,8 @@ button_mode_pressed:
     clr display_mode  ; Volta para o modo 0 se ultrapassar 2
 
 check_start_button:
-    ; Se n?o estiver no modo 1, desconsidera o bot?o start
     cpi display_mode, 1
-    brne button_check_end  ; Sai se n?o estiver no modo 1
+    brne button_check_end
 
     sbic PINC, PC5          ; Pula se o bot?o n?o estiver pressionado
     rjmp button_start_pressed ; Se o bot?o est? pressionado, vai para button_start_pressed
@@ -414,27 +494,9 @@ update_display:
     breq display_normal
     cpi display_mode, 1
     breq display_cron
+	cpi display_mode, 2
+	rjmp display_normal ; modo 3
 	
-	; modo 3, exibe 1 1 1 1
-    ldi ZH, high(display_table)
-    ldi ZL, low(display_table)
-    adiw ZL, 1   ; Avan?a para o padr?o do d?gito 1
-    lpm temp, Z  ; Carrega o padr?o do um
-    out PORTB, temp
-    ldi temp, 1<<PD2
-    out PORTD, temp
-    rcall delay_5ms
-    ldi temp, 1<<PD3
-    out PORTD, temp
-    rcall delay_5ms
-    ldi temp, 1<<PD4
-    out PORTD, temp
-    rcall delay_5ms
-    ldi temp, 1<<PD5
-    out PORTD, temp
-    rcall delay_5ms
-    ret
-
 display_cron:
 	ldi show_cron, 1
 
