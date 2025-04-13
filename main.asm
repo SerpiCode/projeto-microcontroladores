@@ -8,6 +8,8 @@
 .def show_cron = r23
 .def button_reset_state = r24
 .def ajuste_index = r25
+.def piscar_flag = r26
+.def piscar_count = r29
 
 .dseg
 digitos_relogio: .byte 4
@@ -105,6 +107,7 @@ msg_header_modo2_contando:
 
 	ldi button_mode_state, 0
 	ldi cron_status, 0
+	ldi piscar_flag, 0
 
 ;=============================
 ; Timer1 ? 1?Hz (CTC)
@@ -134,29 +137,46 @@ msg_header_modo2_contando:
 ; Loop principal
 ;=============================
 main_lp:
-	; Verifica o estado do botao
+    ; 1) Muda de modo (PC4)
     rcall check_mode_button
-	rcall check_start_button
-	rcall check_reset_button
-	
-    ; multiplexa displays rapido
-    rcall update_display
-	cpi display_mode, 2
-	breq ajustar_horario
 
-	; 2) checa estouro de 1s
-    in temp, TIFR1
+    ; 2) Trata estouro do Timer1 ? blink + time update (1?Hz)
+    in   temp, TIFR1
     andi temp, 1<<OCF1A
-    breq skipoverflow3
+    breq skip_timer          ; sem estouro, pula tudo abaixo
 
-    ; limpa flag de comparacao
-    ldi temp, 1<<OCF1A
-    out TIFR1, temp
+    ; — houve estouro: limpa o flag
+    ldi  temp, 1<<OCF1A
+    out  TIFR1, temp
 
-	rcall send_time_serial	
-	rcall update_time
+    ; — toggle de piscar (0.5?s on/off)
+    inc  piscar_count
+    cpi  piscar_count, 1
+    brne no_blink_toggle
+      ldi piscar_count, 0
+      ldi temp, 1
+      eor piscar_flag, temp
+no_blink_toggle:
 
-skipoverflow3:
+    ; — só atualiza relógio/cronômetro nos modos 0 e 1
+    cpi  display_mode, 2
+    breq skip_time_update
+      rcall send_time_serial
+      rcall update_time
+skip_time_update:
+
+skip_timer:
+    ; 3) Multiplexa os displays (usa piscar_flag internamente)
+    rcall update_display
+
+    ; 4) Se for modo 3 (ajuste), chama ajustar_horario (lê PC5/PC3 sempre)
+    cpi  display_mode, 2
+    breq ajustar_horario
+
+    ; 5) Nos modos 0/1, trata start/reset (cronômetro)
+    rcall check_start_button
+    rcall check_reset_button
+
     rjmp main_lp
 
 ajustar_horario:
@@ -587,6 +607,16 @@ load_relogio_3:
 	rjmp disp3_value
 
 disp0_value:
+	cpi display_mode, 2
+	brne skip_piscar0
+
+	cpi ajuste_index, 3
+	brne skip_piscar0
+
+	cpi piscar_flag, 0
+	breq apaga_disp0
+
+	skip_piscar0:
     add ZL, temp2
     clr temp
     adc ZH, temp
@@ -600,7 +630,29 @@ disp0_value:
 	inc display_index
 	rjmp disp1
 
+apaga_disp0:
+	; Se for pra piscar, apaga o display
+    ldi temp, 0x00
+    out PORTB, temp         ; segmentos apagados
+    ldi temp, 1<<PD2
+    out PORTD, temp         ; display ainda liga
+    rcall delay_5ms
+    ldi temp, 0x00
+    out PORTD, temp
+    inc display_index
+    rjmp disp1		
+
 disp1_value:
+	cpi display_mode, 2
+	brne skip_piscar1
+
+	cpi ajuste_index, 2
+	brne skip_piscar1
+
+	cpi piscar_flag, 0
+	breq apaga_disp1
+
+	skip_piscar1:
     add ZL, temp2
     clr temp
     adc ZH, temp
@@ -614,7 +666,29 @@ disp1_value:
 	inc display_index
     rjmp disp2
 
+apaga_disp1:
+	; Se for pra piscar, apaga o display
+    ldi temp, 0x00
+    out PORTB, temp         ; segmentos apagados
+    ldi temp, 1<<PD3
+    out PORTD, temp         ; display ainda liga
+    rcall delay_5ms
+    ldi temp, 0x00
+    out PORTD, temp
+    inc display_index
+    rjmp disp2	
+
 disp2_value:
+	cpi display_mode, 2
+	brne skip_piscar2
+
+	cpi ajuste_index, 1
+	brne skip_piscar2
+
+	cpi piscar_flag, 0
+	breq apaga_disp2
+
+	skip_piscar2:
     add ZL, temp2
     clr temp
     adc ZH, temp
@@ -628,7 +702,29 @@ disp2_value:
 	inc display_index
     rjmp disp3
 
+apaga_disp2:
+	; Se for pra piscar, apaga o display
+    ldi temp, 0x00
+    out PORTB, temp         ; segmentos apagados
+    ldi temp, 1<<PD4
+    out PORTD, temp         ; display ainda liga
+    rcall delay_5ms
+    ldi temp, 0x00
+    out PORTD, temp
+    inc display_index
+    rjmp disp3
+
 disp3_value:
+	cpi display_mode, 2
+	brne skip_piscar3
+
+	cpi ajuste_index, 0
+	brne skip_piscar3
+
+	cpi piscar_flag, 0
+	breq apaga_disp3
+
+	skip_piscar3:
     add ZL, temp2
     clr temp
     adc ZH, temp
@@ -637,6 +733,21 @@ disp3_value:
     ldi temp, 1<<PD5
     out PORTD, temp         ; so display 3 ligado
     rcall delay_5ms
+    inc display_index
+    cpi display_index, 4
+    brlt dm_skip
+    ldi display_index, 0
+	rjmp dm_skip
+
+apaga_disp3:
+	; Se for pra piscar, apaga o display
+    ldi temp, 0x00
+    out PORTB, temp         ; segmentos apagados
+    ldi temp, 1<<PD5
+    out PORTD, temp         ; display ainda liga
+    rcall delay_5ms
+    ldi temp, 0x00
+    out PORTD, temp
     inc display_index
     cpi display_index, 4
     brlt dm_skip
