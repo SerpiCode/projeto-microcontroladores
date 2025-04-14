@@ -1,3 +1,4 @@
+; Definindo Registradores
 .def temp            = r16
 .def button_mode_state    = r17   ; Estado do bot?o (pressionado ou n?o)
 .def temp2			 = r18
@@ -11,6 +12,7 @@
 .def piscar_flag = r26
 .def piscar_count = r29
 
+; Definindo bytes de dígitos
 .dseg
 digitos_relogio: .byte 4
 digitos_cron: .byte 4
@@ -18,9 +20,9 @@ digitos_cron: .byte 4
 ; lds - le o byte e carrega no reg
 
 .cseg
-
+; Definindo tabela de valores para o display e strings de serial
 display_table:
-    .db 0x7E,0x30,0x6D,0x79,0x33,0x5B,0x5F,0x70,0x7F,0x7B  ; padr?es 0?9
+    .db 0x7E,0x30,0x6D,0x79,0x33,0x5B,0x5F,0x70,0x7F,0x7B  ; padrões 0-9
 
 msg_header_modo1:
     .db "[MODO 1] ", 0    ; string terminada em zero
@@ -58,92 +60,91 @@ msg_header_modo3_uni_seg:
 ;=============================
 ; Inicializacao
 ;=============================
-    ; Pilha
-    ldi temp, low(RAMEND)
-    out SPL, temp
-    ldi temp, high(RAMEND)
-    out SPH, temp
+; Pilha
+ldi temp, low(RAMEND)
+out SPL, temp
+ldi temp, high(RAMEND)
+out SPH, temp
 
-    ; Configura PORTB para os segmentos dos displays (PB0-PB6 como sa?da)
-    ldi temp, 0x7F
-    out DDRB, temp
-	; Configura PORTD para comunica??o serial e controle dos transistores:
-    ; PD0: entrada (RX), PD1: sa?da (TX), PD2 a PD5: saidas para transistores.
-    ; (PD0=0, PD1=1, PD2=1, PD3=1, PD4=1, PD5=1, PD6=0, PD7=0) ? 0x3E (0b00111110)
-    ldi temp, 0x3E
-    out DDRD, temp
+; Configura PORTB para os segmentos dos displays (PB0-PB6 como sa?da)
+ldi temp, 0x7F
+out DDRB, temp
+; Configura PORTD para comunicação serial e controle dos transistores:
+; PD0: entrada (RX), PD1: saída (TX), PD2 a PD5: saidas para transistores.
+; (PD0=0, PD1=1, PD2=1, PD3=1, PD4=1, PD5=1, PD6=0, PD7=0) ? 0x3E (0b00111110)
+ldi temp, 0x3E
+out DDRD, temp
 
-    ; PORTC = bot?o em PC4
-	ldi temp, 0xCF  ; PC4 como entrada (0), o resto como sa?da (1)
-	out DDRC, temp  ; Configura PORTC
+; PORTC = botão em PC4
+ldi temp, 0xCF  ; PC4 como entrada (0), o resto como sa?da (1)
+out DDRC, temp  ; Configura PORTC
 
-	sbi PORTC, PC4  ; Habilita pull-up em PC4 - Modo
-	sbi PORTC, PC5  ; Habilita pull-up em PC5 - Start/Pause
-	sbi PORTC, PC3  ; Habilita pull-up em PC3 - Reset
+sbi PORTC, PC4  ; Habilita pull-up em PC4 - Modo
+sbi PORTC, PC5  ; Habilita pull-up em PC5 - Start/Pause
+sbi PORTC, PC3  ; Habilita pull-up em PC3 - Reset
 
-	;=============================
-	; Configurando a comunica?ao serial
-	;=============================
-    ; Configura baud rate para 9600 (UBRR = 103)
-    ldi  r16, 103         ; valor baixo: 103 = 0x67
-    sts  UBRR0L, r16
-    ldi  r16, 0           ; valor alto: 0
-    sts  UBRR0H, r16
+;=============================
+; Configurando a comunicaçao serial
+;=============================
+; Configura baud rate para 9600 (UBRR = 103)
+ldi  r16, 103         ; valor baixo: 103 = 0x67
+sts  UBRR0L, r16
+ldi  r16, 0           ; valor alto: 0
+sts  UBRR0H, r16
 
-    ; Habilita somente o transmissor (TXEN0) em UCSR0B
-    ldi  r16, (1<<TXEN0)
-    sts  UCSR0B, r16
+; Habilita somente o transmissor (TXEN0) em UCSR0B
+ldi  r16, (1<<TXEN0)
+sts  UCSR0B, r16
 
-    ; Configura o frame: 8 bits, sem paridade, 1 stop bit (por exemplo, UCSZ01 e UCSZ00 = 1)
-    ldi  r16, (1<<UCSZ01)|(1<<UCSZ00)
-    sts  UCSR0C, r16
+; Configura o frame: 8 bits, sem paridade, 1 stop bit (por exemplo, UCSZ01 e UCSZ00 = 1)
+ldi  r16, (1<<UCSZ01)|(1<<UCSZ00)
+sts  UCSR0C, r16
 
-    ; Zera contadores de tempo e multiplex
-	; zera todos os digitos
-	ldi temp2, 0
-	sts digitos_relogio, temp2
-	sts digitos_relogio+1, temp2
-	sts digitos_relogio+2, temp2
-	sts digitos_relogio+3, temp2
+; Zerando contadores de tempo e multiplex
+ldi temp2, 0
+sts digitos_relogio, temp2
+sts digitos_relogio+1, temp2
+sts digitos_relogio+2, temp2
+sts digitos_relogio+3, temp2
 
-	; zera todos os digitos do cron
-	ldi temp2, 0
-	sts digitos_cron, temp2
-	sts digitos_cron+1, temp2
-	sts digitos_cron+2, temp2
-	sts digitos_cron+3, temp2
+ldi temp2, 0
+sts digitos_cron, temp2
+sts digitos_cron+1, temp2
+sts digitos_cron+2, temp2
+sts digitos_cron+3, temp2
 
-    clr display_index
-	ldi display_mode, 2
-	clr button_reset_state
+; Zerando registradores utilitários
+clr display_index
+ldi display_mode, 2
+clr button_reset_state
 
-	ldi button_mode_state, 0
-	ldi cron_status, 0
-	ldi piscar_flag, 0
+ldi button_mode_state, 0
+ldi cron_status, 0
+ldi piscar_flag, 0
 
 ;=============================
 ; Timer1 ? 1?Hz (CTC)
 ;=============================
-    #define CLOCK       16.0e6
-    #define DELAY       1        ; segundos
-    .equ PRESCALE     = 0b100  ; /256
-    .equ PRESCALE_DIV = 256
-    .equ WGM          = 0b0100 ; CTC
-    .equ TOP = int(0.5 + ((CLOCK/PRESCALE_DIV)*DELAY))
+#define CLOCK       16.0e6
+#define DELAY       1        ; segundos
+.equ PRESCALE     = 0b100  ; /256
+.equ PRESCALE_DIV = 256
+.equ WGM          = 0b0100 ; CTC
+.equ TOP = int(0.5 + ((CLOCK/PRESCALE_DIV)*DELAY))
 
-    ; Carrega OCR1A
-    ldi temp, high(TOP)
-    sts OCR1AH, temp
-    ldi temp, low(TOP)
-    sts OCR1AL, temp
+; Carrega OCR1A
+ldi temp, high(TOP)
+sts OCR1AH, temp
+ldi temp, low(TOP)
+sts OCR1AL, temp
 
-    ; Modo CTC em TCCR1A/B, prescaler /256
-    ldi temp, ((WGM & 0b11)<<WGM10)
-    sts TCCR1A, temp
-    ldi temp, ((WGM>>2)<<WGM12) | (PRESCALE<<CS10)
-    sts TCCR1B, temp
+; Modo CTC em TCCR1A/B, prescaler /256
+ldi temp, ((WGM & 0b11)<<WGM10)
+sts TCCR1A, temp
+ldi temp, ((WGM>>2)<<WGM12) | (PRESCALE<<CS10)
+sts TCCR1B, temp
 
-    rjmp main_lp
+rjmp main_lp
 
 ;=============================
 ; Loop principal
@@ -188,30 +189,32 @@ skip_timer:
 
     rjmp main_lp
 
+; Subrotina de ajuste de horário
 ajustar_horario:
-	; Sele??o de digito com botao PC5
-	sbic PINC, 5
-	rjmp no_select_button
-	rcall debounce_select
+    ; Seleciona o dígito a ser ajustado usando o botão ligado ao PINC,5
+    ; Quando o botão é pressionado, o pino PC5 fica em nível lógico baixo
+	sbic PINC, 5	 ; Testa PC5: se o bit estiver limpo (botão pressionado), a instrução seguinte é pulada
+	rjmp no_select_button	; Se não estiver pressionado, pula para a label no_select_button
+	rcall debounce_select	; Debounce
 		inc ajuste_index
 		cpi ajuste_index, 4
 		brlt no_select_button
-		ldi ajuste_index, 0  ; volta ao in?cio se passar de 3
+		ldi ajuste_index, 0  ; volta ao início se passar de 3
 	no_select_button:
 	; Incremento de valor com botao PC3
 	sbic PINC, 3
 	rjmp no_inc_button
 	rcall debounce_inc
-		cpi ajuste_index, 0
-		breq inc_min_dezena
-		cpi ajuste_index, 1
-		breq inc_min_unidade
-		cpi ajuste_index, 2
-		breq inc_seg_dezena
+		cpi ajuste_index, 0		
+		breq inc_min_dezena		; Se ajuste_index == 0, incrementa a dezena dos minutos.
+		cpi ajuste_index, 1		
+		breq inc_min_unidade	; Se ajuste_index == 1, incrementa a unidade dos minutos.
+		cpi ajuste_index, 2		
+		breq inc_seg_dezena		; Se ajuste_index == 2, incrementa a dezena dos segundos.
 		cpi ajuste_index, 3
-		breq inc_seg_unidade
+		breq inc_seg_unidade	; Se ajuste_index == 3, incrementa a unidade dos segundos.
 
-	inc_min_dezena:
+	inc_min_dezena:		; Incrementa dezena dos minutos
 		lds temp2, digitos_relogio+3
 		inc temp2
 		cpi temp2, 6
@@ -222,7 +225,7 @@ ajustar_horario:
 		rcall send_modo3_serial_min_dezena
 		rjmp no_inc_button
 
-	inc_min_unidade:
+	inc_min_unidade:	; Incrementa unidade dos minutos
 		lds temp2, digitos_relogio+2
 		inc temp2
 		cpi temp2, 10
@@ -233,7 +236,7 @@ ajustar_horario:
 		rcall send_modo3_serial_min_unidade
 		rjmp no_inc_button
 	
-	inc_seg_dezena:
+	inc_seg_dezena:		; Incrementa a dezena dos segundos
 		lds temp2, digitos_relogio+1
 		inc temp2
 		cpi temp2, 6
@@ -244,7 +247,7 @@ ajustar_horario:
 		rcall send_modo3_serial_seg_dezena
 		rjmp no_inc_button
 
-	inc_seg_unidade:
+	inc_seg_unidade:	; Incrementa a unidade dos segundos
 		lds temp2, digitos_relogio
 		inc temp2
 		cpi temp2, 10
@@ -255,9 +258,12 @@ ajustar_horario:
 		rcall send_modo3_serial_seg_unidade
 		rjmp no_inc_button
 
-	no_inc_button:
+	no_inc_button:		; Se nenhum botão de incremento foi pressionado, retorna ao loop principal
 		rjmp main_lp
 
+;-------------------------------------------------
+; Rotinas de debounce
+;-------------------------------------------------
 	debounce_select:
 	sbis PINC, 5
 	rjmp debounce_select
@@ -276,18 +282,18 @@ ajustar_horario:
 		brne wait_di
 		ret
 
+; A seguir, rotinas para envio de mensagens via serial indicando o ajuste efetuado
 	send_modo3_serial_min_dezena:
 		push r16
 		push r17
 		push r30
 		push r31
 
-		; Envia o cabe?alho "[MODO 1] "
+		; Envia a string que indica o display que é incrementado
 		ldi  ZH, high(2*msg_header_modo3_dez_min)
 		ldi  ZL, low(2*msg_header_modo3_dez_min)
 		rcall send_string
 
-		; Opcional: Envia CR e LF para mudar de linha
 		ldi  r17, 0x0D     ; Carriage Return
 		rcall send_char
 		ldi  r17, 0x0A     ; Line Feed
@@ -304,12 +310,11 @@ ajustar_horario:
 		push r30
 		push r31
 
-		; Envia o cabe?alho "[MODO 1] "
+		; Envia a string que indica o display que é incrementado
 		ldi  ZH, high(2*msg_header_modo3_uni_min)
 		ldi  ZL, low(2*msg_header_modo3_uni_min)
 		rcall send_string
 
-		; Opcional: Envia CR e LF para mudar de linha
 		ldi  r17, 0x0D     ; Carriage Return
 		rcall send_char
 		ldi  r17, 0x0A     ; Line Feed
@@ -326,12 +331,11 @@ ajustar_horario:
 		push r30
 		push r31
 
-		; Envia o cabe?alho "[MODO 1] "
+		; Envia a string que indica o display que é incrementado
 		ldi  ZH, high(2*msg_header_modo3_dez_seg)
 		ldi  ZL, low(2*msg_header_modo3_dez_seg)
 		rcall send_string
 
-		; Opcional: Envia CR e LF para mudar de linha
 		ldi  r17, 0x0D     ; Carriage Return
 		rcall send_char
 		ldi  r17, 0x0A     ; Line Feed
@@ -348,12 +352,11 @@ ajustar_horario:
 		push r30
 		push r31
 
-		; Envia o cabe?alho "[MODO 1] "
+		; Envia a string que indica o display que é incrementado
 		ldi  ZH, high(2*msg_header_modo3_uni_seg)
 		ldi  ZL, low(2*msg_header_modo3_uni_seg)
 		rcall send_string
 
-		; Opcional: Envia CR e LF para mudar de linha
 		ldi  r17, 0x0D     ; Carriage Return
 		rcall send_char
 		ldi  r17, 0x0A     ; Line Feed
@@ -368,39 +371,39 @@ ajustar_horario:
 update_time:
 	;rcall send_time_serial	
 
-	; Para a contagem no Modo 3
+    ; Se estiver no modo 3, pula para atualizar o cronômetro
 	cpi display_mode, 2
 	breq update_cron_time
 
     ; incrementa MM:SS
-	lds temp2, digitos_relogio
+	lds temp2, digitos_relogio		; Incrementa o dígito dos segundos (unidades)
     inc temp2
 	sts digitos_relogio, temp2
-    cpi temp2, 10
+    cpi temp2, 10					; Checa overflow: se for 10, zera e incrementa o próximo dígito
     brlt update_cron_time
 
     ldi temp2, 0
-	sts digitos_relogio, temp2
-	lds temp2, digitos_relogio+1
+	sts digitos_relogio, temp2		; Zera dígito dos segundos
+	lds temp2, digitos_relogio+1	; Incrementa os segundos (dezenas)
     inc temp2
 	sts digitos_relogio+1, temp2
-    cpi temp2, 6
+    cpi temp2, 6					; Dígito das dezenas dos segundos deve ir de 0 a 5
     brlt update_cron_time
 
-    ldi temp2, 0
+    ldi temp2, 0					; Zera dígito dos segundos de dezenas
 	sts digitos_relogio+1, temp2
-	lds temp2, digitos_relogio+2
+	lds temp2, digitos_relogio+2	; Incrementa os minutos (unidades)
     inc temp2
 	sts digitos_relogio+2, temp2
-    cpi temp2, 10
+    cpi temp2, 10					; Checa overflow para unidades dos minutos
     brlt update_cron_time
 
-    ldi temp2, 0
+    ldi temp2, 0					; Zera dígito das unidades dos minutos
 	sts digitos_relogio+2, temp2
-    lds temp2, digitos_relogio+3
+    lds temp2, digitos_relogio+3	; Incrementa os minutos (dezenas)
 	inc temp2
 	sts digitos_relogio+3, temp2
-    cpi temp2, 6
+    cpi temp2, 6					; Dígito das dezenas dos minutos deve ir de 0 a 5
     brlt update_cron_time
 
     ; se chegou em 60:00, reseta tudo
@@ -412,8 +415,9 @@ skipoverflow2:
 
 update_cron_time:
 	cpi cron_status, 1
-	brne skip_cron
-    ; incrementa MM:SS
+	brne skip_cron			; Se o cronômetro não está ativo, pula para o final
+
+    ; incrementa os dígitos do cronômetro (MM:SS) com a mesma lógica usada acima
 	lds temp2, digitos_cron
     inc temp2
 	sts digitos_cron, temp2
@@ -459,23 +463,24 @@ skipoverflow:
 ; Verifica o estado do bot?o e atualiza o modo de exibi??o
 ;=============================
 check_mode_button:
-    sbic PINC, PC4  ; Pula se o botao nao estiver pressionado
+    sbic PINC, PC4  ; Se PC4 (botão de modo) não está pressionado, pula
     rjmp button_mode_pressed
 
-    ; Bot?o n?o pressionado
+    ; Se não pressionado, zera estado
     clr button_mode_state
     ret
 
 button_mode_pressed:
     cpi button_mode_state, 0
-    brne button_check_end  ; Se ja estava pressionado, nao faz nada
+    brne button_check_end  ; Evita múltiplas transições ao manter o mesmo estado
 
-    ; Botao acabou de ser pressionado
+    ; Marca botão como pressionado
     ldi button_mode_state, 1
 
+	; Reinicia index de ajuste
 	ldi ajuste_index, 0
     
-    ; Avanca para o proximo modo
+    ; Avanca para o proximo modo. Se chegar em 3, volta para 0
     inc display_mode
     cpi display_mode, 3
     brlo button_check_end
@@ -485,8 +490,8 @@ check_start_button:
     cpi display_mode, 1
     brne button_check_end
 
-    sbic PINC, PC5          ; Pula se o bot?o n?o estiver pressionado
-    rjmp button_start_pressed ; Se o bot?o est? pressionado, vai para button_start_pressed
+    sbic PINC, PC5          ; Só processa o botão start no modo 1
+    rjmp button_start_pressed ; Verifica se o botão start (PC5) está pressionado
 
     clr button_start_state
 	ret
@@ -494,12 +499,12 @@ check_start_button:
 button_start_pressed:
     ; Verifica se o botao ja foi pressionado
     cpi button_start_state, 0
-    brne button_check_end   ; Se ja estava pressionado, reseta o estado
+    brne button_check_end   ; Se já estava pressionado, ignora
 
-    ; Se n?o estava pressionado, marca como pressionado
+    ; Marca como pressionado
     ldi button_start_state, 1 ; Marca o bot?o como pressionado
-    ; Aqui voc? pode adicionar a l?gica para iniciar o cron?metro ou outra a??o
 
+	; Se estiver no Modo 1, envia a mensagem "[MODO 2] START"
 	cpi display_mode, 1
     brne skip_start_message
     ;rjmp invert_cron_state      ; Sai da funcao
@@ -527,30 +532,28 @@ skip_start_message:
 
 invert_cron_state:
     ldi temp, 1
-	eor cron_status, temp
+	eor cron_status, temp	; Inverte o estado do cronômetro (liga/desliga)
 
 check_reset_button:
 	cpi display_mode, 1
 	brne button_check_end
-
-	sbic PINC, PC3
+	sbic PINC, PC3			; Verifica o botão Reset (PC3)
 	rjmp button_reset_pressed
-
     clr button_reset_state
 	ret
 
 button_check_end:
-    ret                        ; Retorna da fun??o
+    ret			; Finaliza a checagem dos botões e  retorna da função
 
 button_reset_pressed:
-    ; Verifica se o bot?o j? foi pressionado
+    ; Verifica se o botão já foi pressionado
     cpi button_reset_state, 0
-    brne button_check_end   ; Se j? estava pressionado, reseta o estado
+    brne button_check_end   ; Se já estava pressionado, reseta o estado
 
     ; Se nao estava pressionado, marca como pressionado
-    ldi button_reset_state, 1 ; Marca o bot?o como pressionado
+    ldi button_reset_state, 1 ; Marca o botão como pressionado
 
-	; Verifica se est? no modo 2 para enviar a mensagem
+	; Verifica se está no modo 2 para enviar a mensagem
     cpi display_mode, 1
     brne skip_reset_message
 
@@ -659,8 +662,8 @@ disp0:  ; segundos unidades
     ldi ZL, low(display_table)
 
     cpi show_cron, 0
-    breq load_relogio  ; Se cron_status ? 0, carrega digitos_relogio
-    lds temp2, digitos_cron  ; Caso contr?rio, carrega digitos_cron
+    breq load_relogio  ; Se cron_status é 0, carrega digitos_relogio
+    lds temp2, digitos_cron  ; Caso contrário, carrega digitos_cron
     rjmp disp0_value
 
 load_relogio:
@@ -862,7 +865,7 @@ dm_skip:
     ret
 
 ;-----------------------------
-; Envia um ?nico caractere
+; Envia um único caractere
 ; Entrada: r17 com o caractere a enviar
 ;-----------------------------
 send_char:
